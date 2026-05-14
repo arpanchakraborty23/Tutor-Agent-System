@@ -52,7 +52,6 @@ async def my_agent(ctx: agents.JobContext):
         "identity": participant.identity,
         "name": participant.name,
         **participant_metadata,
-        **participant_attributes,
     }
     logger.info("Participant context: %s", participant_context)
 
