@@ -1,31 +1,39 @@
 import os
 import logging
 import asyncio
-from dotenv import load_dotenv
 
 from livekit import agents, rtc, api
-from livekit.agents import AgentServer, AgentSession, room_io, TurnHandlingOptions, JobProcess
+from livekit.agents import AgentServer, AgentSession, room_io,  JobProcess, metrics, MetricsCollectedEvent,  SessionUsageUpdatedEvent
 from livekit.plugins import noise_cancellation, silero
 from livekit.plugins.turn_detector.english import EnglishModel
-from livekit.agents.metrics import EOUMetrics, LLMMetrics, TTSMetrics
+from livekit.agents.metrics import EOUMetrics, LLMMetrics, TTSMetrics, STTMetrics, VADMetrics, InterruptionMetrics
 
+from src.voice_agent import ExiaHindi, ExiaEnglish, ExiaBengali
+from src.constants import Credentials
 from src.services.session import SessionManager
-from src.voice_agent.agents import Assistant
-from src.prompt.english import english_prompt
 from src.utils import (
     build_user_profile_text,
     normalize_participant_attributes,
     parse_json_metadata,
 )
-from src.services.metrics import ModelMetrics
+from src.voice_agent import MetricsCollector
 
 
 # Configuration
-load_dotenv(".env")
+livekit_config = Credentials.livekit
+aws_config = Credentials.aws
+
+
 logger = logging.getLogger(__name__)
 session_manager = SessionManager()
-model_metrics = ModelMetrics()
-server = AgentServer()
+metrics_collector = MetricsCollector()
+
+# Agent Server Setup
+server = AgentServer(
+    api_key=livekit_config.livekit_api_key,
+    api_secret=livekit_config.livekit_api_secret,
+    ws_url=livekit_config.livekit_url
+)
 
 def prewarm(proc: JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
@@ -55,22 +63,19 @@ async def my_agent(ctx: agents.JobContext):
     }
     logger.info("Participant context: %s", participant_context)
 
-    # Start the agent session with the specified configurations
-    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("AWS_ACCESS_KEY")
-    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY") or os.getenv("AWS_SCERATE_KEY")
-
+    # Conversation Recording
     req = api.RoomCompositeEgressRequest(
         room_name=ctx.room.name,
         audio_only=True,
         file_outputs=[
             api.EncodedFileOutput(
                 file_type=api.EncodedFileType.MP4,
-                filepath="recordings/my-room-test.ogg",
+                filepath=f"recordings/{participant.identity}-{participant.name}.mp4",
                 s3=api.S3Upload(
-                    bucket=os.getenv("AWS_BUCKET_NAME"),
-                    region=os.getenv("AWS_REGION"),
-                    access_key=aws_access_key,
-                    secret=aws_secret_key,
+                    bucket=aws_config.aws_recording_bucket,
+                    region=aws_config.aws_region,
+                    access_key=aws_config.aws_access_key,
+                    secret=aws_config.aws_secret_key,
                 ),
             )
         ],
@@ -84,30 +89,40 @@ async def my_agent(ctx: agents.JobContext):
         logger.warning(f"Egress start failed, continuing without recording: {e}")
 
     user_info = build_user_profile_text(participant_context)
-    agent = Assistant()._tutor(
-        language="english",
-        instructions=english_prompt(user_info=user_info),
-        initial_ctx=None,
-    )
+
+
+    agent_setup = {
+        "en": ExiaEnglish,
+        "bn": ExiaBengali,
+        "hi": ExiaHindi
+    }
+
+
+    agent = agent_setup['en']
 
     session = AgentSession(
-        stt="deepgram/nova-3:multi",
-        llm="openai/gpt-4.1-mini",
-        tts="cartesia/sonic-3:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
         vad=silero.VAD.load(),
-        turn_handling=TurnHandlingOptions(
-            turn_detection=EnglishModel(),
-        ),
+        turn_handling={
+            "endpointing": {
+                "mode": "dynamic",
+                "min_delay": 0.5,
+                "max_delay": 1.5,
+            },
+            "interruption":{
+                "mode":"adaptive",
+                "min_duration":0.4,
+                "resume_false_interruption":True   
+            },
+            "preemptive_generation":{
+                "enabled":True,
+                "preemptive_tts":True,
+            }
+        }
     )
 
     # Initialize session manager with participant context
     session_manager.start(session_id=ctx.room.name, participant_context=participant_context)
 
-    # NOTE: Metrics collection via session.metrics_collected is not directly available in AgentSession API.
-    # Metrics tracking is now handled through:
-    # 1. Session end event - latency stats retrieved via session_manager.get_latency_stats()
-    # 2. Conversation items - logged via on_conversation_item handler
-    # 3. Manual tracking - session_manager.track_latency() can be called from within agents
 
     await session.start(
         room=ctx.room,
@@ -118,6 +133,28 @@ async def my_agent(ctx: agents.JobContext):
             ),
         ),
     )
+
+    @session.on("metrics_collected")
+    def _on_metrics_collected(ev: MetricsCollectedEvent):
+        metrics.log_metrics(ev.metrics)
+        m = ev.metrics
+
+        if isinstance(m, STTMetrics):
+            metrics_collector.collect_stt(m)
+        elif isinstance(m, VADMetrics):
+            metrics_collector.collect_vad(m)
+        elif isinstance(m, EOUMetrics):
+            metrics_collector.collect_eou(m)
+        elif isinstance(m, LLMMetrics):
+            metrics_collector.collect_llm(m)
+        elif isinstance(m, TTSMetrics):
+            metrics_collector.collect_tts(m)
+        elif isinstance(m, InterruptionMetrics):
+            metrics_collector.collect_interruption(m)
+
+    @session.on("session_usage_updated")
+    def _on_session_usage_updated(ev: SessionUsageUpdatedEvent):
+        metrics_collector.update_session_usage(ev)
 
     # Event handler for conversation items
     @session.on("conversation_item_added")
@@ -136,6 +173,10 @@ async def my_agent(ctx: agents.JobContext):
                     "speaker": speaker
                 }
                 session_manager.session_log(log_entry)
+            
+            if event.item.metrics:
+                metrics_collector.add_turn_latency(event.item.role, event.item.metrics)
+
         except Exception as e:
             logger.error(f"Error logging conversation item: {e}")
 
@@ -143,12 +184,6 @@ async def my_agent(ctx: agents.JobContext):
     async def end_handler():
         """Handle session end and perform cleanup."""
         try:
-            # Print metrics summary before ending
-            model_metrics.print_summary()
-            
-            # Print latency statistics
-            latency_stats = session_manager.get_latency_stats()
-            logger.info(f"Session Latency Statistics: {latency_stats}")
             
             # End session and persist conversation to MongoDB
             session_manager.end_session()

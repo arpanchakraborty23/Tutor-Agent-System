@@ -28,6 +28,7 @@ class AWSConfig:
     aws_access_key = required_env("AWS_ACCESS_KEY_ID")
     aws_secret_key = required_env("AWS_SECRET_ACCESS_KEY")
     aws_region = required_env("AWS_REGION")
+    aws_recording_bucket = required_env("AWS_BUCKET_NAME")
 
 
 class MongoConfig:
