@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import ClassVar, Literal
 
+from livekit import agents
+from livekit.agents import llm, stt, tts
+
 from .credentials import ModelEnv
 
 SupportedLanguage = Literal["en", "hi", "bn"]
@@ -11,9 +14,9 @@ class LanguageModelConfig:
     """Voice model settings for one supported language."""
     code: str
     name: str
-    stt: object
-    llm: object
-    tts: object
+    stt: stt.STT
+    llm: llm.LLM
+    tts: tts.TTS
     greeting: str
     instructions: str
 
