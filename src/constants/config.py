@@ -25,9 +25,9 @@ class LiveKitConfig:
 
 
 class AWSConfig:
-    aws_access_key = env("AWS_ACCESS_KEY_ID")
-    aws_secret_key = env("AWS_SECRET_ACCESS_KEY")
-    aws_region = env("AWS_REGION")
+    aws_access_key = required_env("AWS_ACCESS_KEY_ID")
+    aws_secret_key = required_env("AWS_SECRET_ACCESS_KEY")
+    aws_region = required_env("AWS_REGION")
 
 
 class MongoConfig:
@@ -39,9 +39,9 @@ class MongoConfig:
 
 
 class ProviderConfig:
-    aws_bedrock_api_key = env("AWS_BEDROCK_API_KEY")
-    sarvam_api_key = env("SARVAM_API_KEY")
-    deepgram_api_key = env("DEEPGRAM_API_KEY")
-    Cartesia_api_key= env("CARTESIA_API_KEY")
+    aws_bedrock_api_key = required_env("AWS_BEDROCK_API_KEY")
+    sarvam_api_key = required_env("SARVAM_API_KEY")
+    deepgram_api_key = required_env("DEEPGRAM_API_KEY")
+    Cartesia_api_key = required_env("CARTESIA_API_KEY")
 
 
