@@ -10,11 +10,10 @@ from livekit.agents.metrics import EOUMetrics, LLMMetrics, TTSMetrics, STTMetric
 
 from src.voice_agent import ExiaHindi, ExiaEnglish, ExiaBengali
 from src.constants import Credentials
-from src.services.session import SessionManager
+from src.services import SessionManager
+from src.services import MongoServices
 from src.utils import (
     build_user_profile_text,
-    normalize_participant_attributes,
-    parse_json_metadata,
 )
 from src.voice_agent import MetricsCollector
 
@@ -22,10 +21,12 @@ from src.voice_agent import MetricsCollector
 # Configuration
 livekit_config = Credentials.livekit
 aws_config = Credentials.aws
+mongo_config = Credentials.mongo  
 
 
 logger = logging.getLogger(__name__)
 session_manager = SessionManager()
+mongo_services = MongoServices(url=mongo_config.mongodb_uri or "", db=mongo_config.mongodb_name or "",collection=mongo_config.mongodb_user_collection or "")
 metrics_collector = MetricsCollector()
 
 # Agent Server Setup
@@ -51,15 +52,14 @@ async def my_agent(ctx: agents.JobContext):
     await ctx.connect()
     participant = await ctx.wait_for_participant()
 
+    # User Data Lookup
+    user_data = mongo_services.collection.find_one({"identity": participant.identity}) if mongo_services.collection else None
+
     # Build the runtime context 
-    participant_metadata = parse_json_metadata(participant.metadata)
-    participant_attributes = normalize_participant_attributes(
-        getattr(participant, "attributes", None)
-    )
     participant_context = {
         "identity": participant.identity,
         "name": participant.name,
-        **participant_metadata,
+        "language": user_data.get("language", "en") if user_data else "en",
     }
     logger.info("Participant context: %s", participant_context)
 
@@ -88,9 +88,6 @@ async def my_agent(ctx: agents.JobContext):
     except Exception as e:
         logger.warning(f"Egress start failed, continuing without recording: {e}")
 
-    user_info = build_user_profile_text(participant_context)
-
-
     agent_setup = {
         "en": ExiaEnglish,
         "bn": ExiaBengali,
@@ -98,7 +95,7 @@ async def my_agent(ctx: agents.JobContext):
     }
 
 
-    agent = agent_setup['en']
+    agent = agent_setup[participant_context["language"]](participant_context)
 
     session = AgentSession(
         vad=silero.VAD.load(),
