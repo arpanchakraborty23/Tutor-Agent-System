@@ -53,7 +53,7 @@ async def my_agent(ctx: agents.JobContext):
     participant = await ctx.wait_for_participant()
 
     # User Data Lookup
-    user_data = mongo_services.collection.find_one({"identity": participant.identity}) if mongo_services.collection else None
+    user_data = mongo_services.collection.find_one({"identity": participant.identity})
 
     # Build the runtime context 
     participant_context = {
@@ -63,30 +63,6 @@ async def my_agent(ctx: agents.JobContext):
     }
     logger.info("Participant context: %s", participant_context)
 
-    # Conversation Recording
-    req = api.RoomCompositeEgressRequest(
-        room_name=ctx.room.name,
-        audio_only=True,
-        file_outputs=[
-            api.EncodedFileOutput(
-                file_type=api.EncodedFileType.MP4,
-                filepath=f"recordings/{participant.identity}-{participant.name}.mp4",
-                s3=api.S3Upload(
-                    bucket=aws_config.aws_recording_bucket,
-                    region=aws_config.aws_region,
-                    access_key=aws_config.aws_access_key,
-                    secret=aws_config.aws_secret_key,
-                ),
-            )
-        ],
-    )
-
-    # Do not block the agent session if egress/recording setup fails.
-    try:
-        lkapi = api.LiveKitAPI()
-        await lkapi.egress.start_room_composite_egress(req)
-    except Exception as e:
-        logger.warning(f"Egress start failed, continuing without recording: {e}")
 
     agent_setup = {
         "en": ExiaEnglish,
