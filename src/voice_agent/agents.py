@@ -25,7 +25,7 @@ class ExiaEnglish(BaseAgent):
                     english_models.stt,
                     inference.STT(model="assemblyai/universal-streaming"),
                     deepgram.STT(
-                        model="conversationalai",
+                        model="nova-3",
                         language="en-IN",
                         enable_diarization=True,
                         api_key=ProviderConfig.deepgram_api_key,
@@ -62,7 +62,7 @@ class ExiaHindi(BaseAgent):
                 stt=[
                     hindi_models.stt,
                     deepgram.STT(
-                        model="conversationalai",
+                        model="nova-3",
                         language="hi-IN",
                         enable_diarization=True,
                         api_key=ProviderConfig.deepgram_api_key,
@@ -99,7 +99,7 @@ class ExiaBengali(BaseAgent):
                 stt=[
                     bengali_models.stt,
                     deepgram.STT(
-                        model="conversationalai",
+                        model="nova-3",
                         language="bn-IN",
                         enable_diarization=True,
                         api_key=ProviderConfig.deepgram_api_key,
