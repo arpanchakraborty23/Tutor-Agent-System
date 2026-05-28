@@ -14,18 +14,18 @@ from src.constants.config import (
 
 class ModelEnv:
     livekit_stt_model_en = deepgram.STT(
-        model="conversationalai",
+        model="nova-3",
         language="en-IN",
         api_key=ProviderConfig.deepgram_api_key
     )
 
-    livekit_llm_model_en = aws.LLM(
-        model="amazon.nova-2-lite-v1:0",
-        api_key=AWSConfig.aws_access_key,
-        api_secret=AWSConfig.aws_secret_key,
-        region=AWSConfig.aws_region or "us-east-1",
+    livekit_llm_model_en = sarvam.LLM(
+        model="sarvam-105b-32k",
+        api_key=ProviderConfig.sarvam_api_key,
+        temperature=0.8,
+        max_tokens=4096,
     )
-
+    
     livekit_tts_model_en = cartesia.TTS(
         model="sonic-3",
         language="en",
@@ -37,16 +37,16 @@ class ModelEnv:
     )
 
     livekit_stt_model_hi = deepgram.STT(
-        model="conversationalai",
+        model="nova-3",
         language="hi-Latn",
         api_key=ProviderConfig.deepgram_api_key
     )
 
-    livekit_llm_model_hi = aws.LLM(
-        model="amazon.nova-2-lite-v1:0",
-        api_key=AWSConfig.aws_access_key,
-        api_secret=AWSConfig.aws_secret_key,
-        region=AWSConfig.aws_region or "us-east-1",
+    livekit_llm_model_hi = sarvam.LLM(
+        model="sarvam-105b-32k",
+        api_key=ProviderConfig.sarvam_api_key,
+        temperature=0.8,
+        max_tokens=4096,
     )
 
     livekit_tts_model_hi = cartesia.TTS(
@@ -68,11 +68,11 @@ class ModelEnv:
 
     )
 
-    livekit_llm_model_bn =  aws.LLM(
-        model="amazon.nova-2-lite-v1:0",
-        api_key=AWSConfig.aws_access_key,
-        api_secret=AWSConfig.aws_secret_key,
-        region=AWSConfig.aws_region or "us-east-1",
+    livekit_llm_model_bn =   sarvam.LLM(
+        model="sarvam-105b-32k",
+        api_key=ProviderConfig.sarvam_api_key,
+        temperature=0.8,
+        max_tokens=4096,
     )
 
     livekit_tts_model_bn = sarvam.TTS(
